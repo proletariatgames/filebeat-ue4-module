@@ -1,0 +1,120 @@
+{
+  "description": "Pipeline for parsing Unreal Engine 4 log files",
+  "processors": [
+    {
+      "set" : {
+        "field": "original_text",
+        "value": "{{message}}"
+      }
+    },
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [ "^\\[%{LOGTIMESTAMP:tmp.ue4_timestamp}\\]%{EVERYTHING_ELSE:message}" ],
+        "pattern_definitions" : {
+          "LOGTIMESTAMP" : "%{YEAR}\\.%{MONTHNUM}\\.%{MONTHDAY}-%{HOUR}\\.%{MINUTE}\\.%{SECOND}",
+          "EVERYTHING_ELSE": ".*"
+        },
+        "ignore_failure": true
+      }
+    },
+    {
+      "date" : {
+        "field" : "tmp.ue4_timestamp",
+        "target_field" : "@timestamp",
+        "formats" : ["yyyy.MM.dd-HH.mm.ss:SSS"],
+        "timezone" : "UTC",
+        "ignore_failure": true
+      }
+    },
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [ "^\\[%{LOGFRAME:ue4.frame}\\]%{EVERYTHING_ELSE:message}" ],
+        "pattern_definitions" : {
+          "LOGFRAME": "\\s*[0-9]+",
+          "EVERYTHING_ELSE": ".*"
+        },
+        "ignore_failure": true
+      }
+    },
+    {
+      "trim": {
+        "field": "ue4.frame",
+        "ignore_missing": true
+      }
+    },
+    {
+      "convert" : {
+        "field" : "ue4.frame",
+        "type": "integer",
+        "ignore_missing": true
+      }
+    },
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [ "^%{LOGCATEGORY:ue4.category}: %{EVERYTHING_ELSE:message}" ],
+        "pattern_definitions" : {
+          "LOGCATEGORY": "(Log\\w+)|(\\w+Log)",
+          "EVERYTHING_ELSE": ".*"
+        },
+        "ignore_failure": true
+      }
+    },
+    {
+      "set" : {
+        "field": "ue4.level",
+        "value": "Log"
+      }
+    },
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [ "^%{LOGLEVEL:ue4.level}: %{EVERYTHING_ELSE:message}" ],
+        "pattern_definitions" : {
+          "LOGLEVEL": "(Fatal|Error|Warning|Log|Display|Verbose|VeryVerbose)",
+          "EVERYTHING_ELSE": ".*"
+        },
+        "ignore_failure": true
+      }
+    },
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [ "^%{EVERYTHING_ELSE:message} !json%{JSONOBJ:tmp.json_raw}$" ],
+        "pattern_definitions" : {
+          "JSONOBJ": "{.*}",
+          "EVERYTHING_ELSE": ".*"
+        },
+        "ignore_failure": true
+      }
+    },
+    {
+      "json": {
+        "field": "tmp.json_raw",
+        "target_field": "tmp.json_root",
+        "ignore_failure": true
+      }
+    },
+    {
+      "script": {
+        "if": "ctx.tmp.json_root != null",
+        "lang": "painless",
+        "source": "for (key in ctx.tmp.json_root.keySet()) { ctx['fields'][key] = ctx.tmp.json_root[key]; }"
+      }
+    },
+    {
+      "remove": {
+        "field": "tmp",
+        "ignore_failure": false
+      }
+    }
+  ],
+  "on_failure" : [{
+    "set" : {
+      "field" : "error.message",
+      "value" : "{{ _ingest.on_failure_message }}"
+    }
+  }]
+}

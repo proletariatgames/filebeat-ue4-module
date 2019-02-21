@@ -1,0 +1,7 @@
+- module: ue4
+  log:
+    enabled: true
+    # The path(s) to your Unreal log files. Typically of the form <Game>/Saved/Logs/*.log.
+    var.paths:
+    - '/YourGame/Saved/Logs/*.log'
+    # - 'C:\YourGame\Saved\Logs\*.log'
